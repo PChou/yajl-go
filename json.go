@@ -2,10 +2,12 @@ package yajl
 
 // #include "api/yajl_tree.h"
 // #include "shim-go.h"
+// #include <stdlib.h>
 import "C"
 
 import (
 	"errors"
+	"unsafe"
 )
 
 type JsonObjectCompareOption int
@@ -20,16 +22,16 @@ type JsonObject interface {
 }
 
 type JsonMap struct {
-	inner map[string]JsonObject
+	Inner map[string]JsonObject
 }
 
 type JsonArray struct {
-	inner []JsonObject
+	Inner []JsonObject
 }
 
 type JsonString struct {
-	realtype int
-	inner    string
+	RealType int
+	Inner    string
 }
 
 func (jString *JsonString) Compare(other JsonObject, option JsonObjectCompareOption) bool {
@@ -39,12 +41,12 @@ func (jString *JsonString) Compare(other JsonObject, option JsonObjectCompareOpt
 
 	if oString, ok := other.(*JsonString); ok {
 		if option&ALL_VALUE_TREAT_AS_STRING > 0 {
-			return oString.inner == jString.inner
+			return oString.Inner == jString.Inner
 		} else {
-			if oString.realtype != jString.realtype {
+			if oString.RealType != jString.RealType {
 				return false
 			} else {
-				return oString.inner == jString.inner
+				return oString.Inner == jString.Inner
 			}
 		}
 	} else {
@@ -58,12 +60,12 @@ func (jMap *JsonMap) Compare(other JsonObject, option JsonObjectCompareOption) b
 	}
 
 	if oMap, ok := other.(*JsonMap); ok {
-		if len(oMap.inner) != len(jMap.inner) {
+		if len(oMap.Inner) != len(jMap.Inner) {
 			return false
 		}
 
-		for k, v := range jMap.inner {
-			if v.Compare(oMap.inner[k], option) == false {
+		for k, v := range jMap.Inner {
+			if v.Compare(oMap.Inner[k], option) == false {
 				return false
 			}
 		}
@@ -80,14 +82,14 @@ func (jArray *JsonArray) Compare(other JsonObject, option JsonObjectCompareOptio
 	}
 
 	if oArray, ok := other.(*JsonArray); ok {
-		if len(oArray.inner) != len(jArray.inner) {
+		if len(oArray.Inner) != len(jArray.Inner) {
 			return false
 		}
 
-		coArray := make([]JsonObject, len(oArray.inner))
-		copy(coArray, oArray.inner)
+		coArray := make([]JsonObject, len(oArray.Inner))
+		copy(coArray, oArray.Inner)
 
-		for _, sObject := range jArray.inner {
+		for _, sObject := range jArray.Inner {
 			found := false
 			for j, oObject := range coArray {
 				if sObject.Compare(oObject, option) {
@@ -109,11 +111,14 @@ func (jArray *JsonArray) Compare(other JsonObject, option JsonObjectCompareOptio
 }
 
 func ParseJson(source string) (JsonObject, error) {
-	err := make([]byte, 1024)
-	tree := C.yajl_tree_parse(C.CString(source), C.CString(string(err)), 1024)
+	csource := C.CString(source)
+	defer C.free(unsafe.Pointer(csource))
+	err := (*C.char)(C.malloc(1024))
+	defer C.free(unsafe.Pointer(err))
+	tree := C.yajl_tree_parse(csource, err, 1024)
 	defer C.yajl_tree_free(tree)
 	if tree == nil {
-		return nil, errors.New(string(err))
+		return nil, errors.New(C.GoString(err))
 	}
 	return walkCTree(tree), nil
 }
@@ -121,17 +126,17 @@ func ParseJson(source string) (JsonObject, error) {
 func walkCTree(tree C.yajl_val) JsonObject {
 	if tree._type == C.yajl_t_object {
 		jm := &JsonMap{}
-		jm.inner = make(map[string]JsonObject)
+		jm.Inner = make(map[string]JsonObject)
 		for i := C.size_t(0); i < C.yajl_val_get_object_len(tree); i++ {
 			key := C.GoString(C.yajl_val_get_object_key(tree, i))
-			jm.inner[key] = walkCTree(C.yajl_val_get_object_value(tree, i))
+			jm.Inner[key] = walkCTree(C.yajl_val_get_object_value(tree, i))
 		}
 		return jm
 	} else if tree._type == C.yajl_t_array {
 		ja := &JsonArray{}
-		ja.inner = make([]JsonObject, 0)
+		ja.Inner = make([]JsonObject, 0)
 		for i := C.size_t(0); i < C.yajl_val_get_array_len(tree); i++ {
-			ja.inner = append(ja.inner, walkCTree(C.yajl_val_get_array_value(tree, i)))
+			ja.Inner = append(ja.Inner, walkCTree(C.yajl_val_get_array_value(tree, i)))
 		}
 		return ja
 	} else if tree._type == C.yajl_t_string {

@@ -15,9 +15,11 @@ func TestParse(t *testing.T) {
 
 	_, err = ParseJson(`{"a":"b",}`)
 	assert.NotNil(t, err)
+	//fmt.Println(err)
 }
 
 func TestCompare(t *testing.T) {
+
 	j1, _ := ParseJson(`{"a":"b"}`)
 	j2, _ := ParseJson(`{"a":"b"}`)
 	assert.True(t, j1.Compare(j2, DEFAULT))
@@ -61,4 +63,8 @@ func TestCompare(t *testing.T) {
 	j21, _ := ParseJson(`[{"nil":null}]`)
 	j22, _ := ParseJson(`[{"nil":"null"},{"diff":null}]`)
 	assert.False(t, j21.Compare(j22, ALL_VALUE_TREAT_AS_STRING))
+
+	j23, _ := ParseJson(`{"a":"b", "c":"d"}`)
+	j24, _ := ParseJson(`{"a":"b", "a":"b"}`)
+	assert.False(t, j24.Compare(j23, DEFAULT))
 }
